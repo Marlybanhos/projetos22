@@ -1,0 +1,1374 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACOMPANHAMENTO MENSAL DE BOLETO APRO+ BRASIL</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <!-- Font Awesome para ícones -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- jsPDF para geração de PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        body {
+            background-color: #f0f2f5;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .dashboard-header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 20px 0;
+            margin-bottom: 20px;
+            border-radius: 5px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .card {
+            margin-bottom: 1.5rem;
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+            height: 100%;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        .card-header {
+            border-radius: 10px 10px 0 0 !important;
+            font-weight: bold;
+            color: white;
+            padding: 12px 15px;
+        }
+        .card-header-lote-fechamento {
+            background-color: #3498db; /* Azul */
+        }
+        .card-header-lote-fechamento-15 {
+            background-color: #2980b9; /* Azul escuro */
+        }
+        .card-header-lote-fechamento-30 {
+            background-color: #1abc9c; /* Verde água */
+        }
+        .card-header-acordo-financeiro {
+            background-color: #9b59b6; /* Roxo */
+        }
+        .card-header-desconto {
+            background-color: #e67e22; /* Laranja */
+        }
+        .card-header-desinstalacao-equipamento {
+            background-color: #c0392b; /* Vermelho escuro */
+        }
+        .card-header-total {
+            background-color: #34495e; /* Azul escuro/cinza */
+        }
+        .table th, .table td {
+            vertical-align: middle;
+            padding: 10px 15px;
+        }
+        .situacao-baixado {
+             color: #27ae60;
+             font-weight: bold;
+        }
+        .situacao-aberto {
+             color: #e74c3c;
+             font-weight: bold;
+        }
+        .total-row td {
+            font-weight: bold;
+            background-color: #f8f9fa;
+        }
+        .filter-section {
+            background-color: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+        .data-table {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-top: 30px;
+            padding: 15px;
+        }
+        .data-table .table {
+            margin-bottom: 0;
+        }
+        .data-table-header {
+            background-color: #34495e;
+            color: white;
+            padding: 15px;
+            border-radius: 10px 10px 0 0;
+            margin-bottom: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .btn-primary {
+            background-color: #3498db;
+            border-color: #3498db;
+        }
+        .btn-primary:hover {
+            background-color: #2980b9;
+            border-color: #2980b9;
+        }
+        .btn-success {
+            background-color: #27ae60;
+            border-color: #27ae60;
+        }
+        .btn-success:hover {
+            background-color: #219955;
+            border-color: #219955;
+        }
+        .form-select, .form-control {
+            border-radius: 5px;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            visibility: hidden;
+        }
+        .spinner-border {
+            width: 3rem;
+            height: 3rem;
+        }
+        /* Estilos para o painel de resumo total */
+        .total-summary-card {
+            margin-bottom: 30px;
+            border: none;
+            border-radius: 10px;
+            box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15);
+            height: 100%;
+        }
+        .total-summary-header {
+            background-color: #2c3e50;
+            color: white;
+            font-size: 1.25rem;
+            font-weight: bold;
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px 10px 0 0;
+        }
+        .total-summary-body {
+            padding: 0;
+        }
+        .total-summary-table {
+            margin-bottom: 0;
+        }
+        .total-summary-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            text-align: center;
+        }
+        .total-aberto-row {
+            background-color: #ffebee; /* Fundo vermelho claro */
+        }
+        .total-aberto-cell {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .total-baixado-row {
+            background-color: #e8f5e9; /* Fundo verde claro */
+        }
+        .total-baixado-cell {
+            color: #27ae60;
+            font-weight: bold;
+        }
+        .total-receber-row {
+            background-color: #34495e;
+            color: white;
+            font-weight: bold;
+        }
+        .chart-container {
+            height: 250px;
+            padding: 15px;
+        }
+        .last-update {
+            font-size: 0.85rem;
+            color: #7f8c8d;
+            text-align: right;
+            margin-top: 5px;
+            margin-bottom: 15px;
+        }
+        /* Cores de preenchimento para células */
+        .bg-baixado {
+            background-color: #e8f5e9 !important; /* Verde claro */
+            color: #27ae60 !important;
+            font-weight: bold;
+        }
+        .bg-aberto {
+            background-color: #ffebee !important; /* Vermelho claro */
+            color: #e74c3c !important;
+            font-weight: bold;
+        }
+        /* Estilos para paginação */
+        .pagination-container {
+            display: flex;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        .pagination {
+            margin-bottom: 0;
+        }
+        /* Estilos para impressão/PDF */
+        @media print {
+            body {
+                background-color: white;
+                margin: 0;
+                padding: 0;
+            }
+            .dashboard-header {
+                background-color: #2c3e50 !important;
+                color: white !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .card {
+                break-inside: avoid;
+                page-break-inside: avoid;
+                margin-bottom: 15px;
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+            .card-header {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .filter-section, 
+            .btn-generate-pdf,
+            .pagination-container {
+                display: none;
+            }
+            .bg-baixado, .bg-aberto, 
+            .total-aberto-row, .total-baixado-row, 
+            .total-receber-row {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+        /* Botão PDF */
+        .btn-generate-pdf {
+            margin-bottom: 20px;
+        }
+        /* Estilos para o campo de pesquisa */
+        .input-group-text {
+            background-color: #34495e;
+            color: white;
+            border: none;
+        }
+        #searchInput {
+            background-color: white;
+            color: #34495e;
+            border: 1px solid #34495e;
+        }
+        #searchInput::placeholder {
+            color: #7f8c8d;
+        }
+        /* Estilos para as colunas de porcentagem */
+        .table th.percentage, .table td.percentage {
+            text-align: center !important;
+            width: 15%; /* Ajuste proporcional para as colunas de porcentagem */
+        }
+        .table th:not(.percentage), .table td:not(.percentage) {
+            padding: 10px 8px; /* Reduzir um pouco o padding para acomodar as novas colunas */
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Carregando...</span>
+        </div>
+    </div>
+
+    <div class="container mt-4" id="dashboard-container">
+        <div class="dashboard-header text-center" id="dashboard-header">
+            <h1><i class="fas fa-chart-line me-2"></i> ACOMPANHAMENTO MENSAL DE BOLETO APRO+ BRASIL</h1>
+        </div>
+        
+        <div class="filter-section">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="fileInput" class="form-label">Arquivo Excel</label>
+                    <input type="file" class="form-control" id="fileInput" accept=".xlsx, .xls">
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label for="loteFiltro" class="form-label">Filtrar por Lote</label>
+                    <select class="form-select" id="loteFiltro">
+                        <option value="todos">Todos os Lotes</option>
+                        <!-- Opções serão preenchidas dinamicamente -->
+                    </select>
+                </div>
+                <div class="col-md-3 mb-3">
+                    <label for="mesFiltro" class="form-label">Filtrar por Mês</label>
+                    <select class="form-select" id="mesFiltro">
+                        <option value="todos">Todos os Meses</option>
+                        <option value="1">Janeiro</option>
+                        <option value="2">Fevereiro</option>
+                        <option value="3">Março</option>
+                        <option value="4">Abril</option>
+                        <option value="5">Maio</option>
+                        <option value="6">Junho</option>
+                        <option value="7">Julho</option>
+                        <option value="8">Agosto</option>
+                        <option value="9">Setembro</option>
+                        <option value="10">Outubro</option>
+                        <option value="11">Novembro</option>
+                        <option value="12">Dezembro</option>
+                    </select>
+                </div>
+                <div class="col-md-2 mb-3 d-flex align-items-end">
+                    <button class="btn btn-primary w-100" onclick="processFile()">
+                        <i class="fas fa-sync-alt me-2"></i>Processar
+                    </button>
+                </div>
+            </div>
+            <div class="mt-2 text-muted small">Lendo intervalo A2:H1048569 do arquivo Excel</div>
+            <div id="errorMessage" class="mt-2 text-danger"></div>
+        </div>
+
+        <div id="lastUpdateContainer" class="last-update" style="display: none;">
+            <i class="fas fa-clock me-1"></i> Última atualização: <span id="lastUpdateTime"></span>
+        </div>
+
+        <button id="generatePdfBtn" class="btn btn-success btn-generate-pdf" style="display: none;" onclick="generatePDF()">
+            <i class="fas fa-file-pdf me-2"></i>Gerar PDF
+        </button>
+
+        <!-- Painel de Resumo Total -->
+        <div id="totalSummaryPanel" style="display: none;">
+            <div class="row">
+                <div class="col-md-7">
+                    <div class="card total-summary-card">
+                        <div class="total-summary-header">
+                            <i class="fas fa-file-invoice-dollar me-2"></i> BOLETOS TOTAL
+                        </div>
+                        <div class="total-summary-body">
+                            <table class="table total-summary-table">
+                                <thead>
+                                    <tr>
+                                        <th>QUANTIDADE BOLETOS</th>
+                                        <th id="totalBoletos" class="text-center">0</th>
+                                        <th>%</th>
+                                        <th>QTD</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr class="total-aberto-row">
+                                        <td class="total-aberto-cell">TOTAL ABERTO</td>
+                                        <td id="totalAbertoValor" class="text-end total-aberto-cell">R$ 0,00</td>
+                                        <td id="totalAbertoPercent" class="text-center total-aberto-cell">0%</td>
+                                        <td id="totalAbertoQtd" class="text-center total-aberto-cell">0</td>
+                                    </tr>
+                                    <tr class="total-baixado-row">
+                                        <td class="total-baixado-cell">TOTAL BAIXADO</td>
+                                        <td id="totalBaixadoValor" class="text-end total-baixado-cell">R$ 0,00</td>
+                                        <td id="totalBaixadoPercent" class="text-center total-baixado-cell">0%</td>
+                                        <td id="totalBaixadoQtd" class="text-center total-baixado-cell">0</td>
+                                    </tr>
+                                    <tr class="total-receber-row">
+                                        <td>VALOR TOTAL A RECEBER</td>
+                                        <td id="totalReceberValor" class="text-end" colspan="3">R$ 0,00</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="card total-summary-card">
+                        <div class="total-summary-header">
+                            <i class="fas fa-chart-column me-2"></i> GRÁFICO DE SITUAÇÃO
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="situacaoChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="dashboardPanels" class="row">
+            <!-- Os painéis do dashboard serão inseridos aqui -->
+        </div>
+
+        <div class="data-table-container" style="display: none;">
+            <div class="data-table-header">
+                <h4 class="mb-0"><i class="fas fa-table me-2"></i> Dados Detalhados</h4>
+                <div class="d-flex align-items-center">
+                    <div class="input-group me-3" style="width: 250px;">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" class="form-control" id="searchInput" placeholder="Pesquisar por Nome..." onkeyup="searchTable()">
+                    </div>
+                    <span id="tableInfo" class="text-light"></span>
+                </div>
+            </div>
+            <div class="data-table">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover" id="detailedDataTable">
+                        <thead>
+                            <tr>
+                                <th>Nome</th>
+                                <th>Situação</th>
+                                <th>Data Vencimento</th>
+                                <th>Valor</th>
+                                <th>Tipo Boleto</th>
+                                <th>Lote</th>
+                                <th>Vencimento Original</th>
+                                <th>Data Pagamento</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detailedDataTableBody">
+                            <!-- Dados detalhados serão inseridos aqui -->
+                        </tbody>
+                    </table>
+                </div>
+                <div class="pagination-container">
+                    <nav aria-label="Navegação de página">
+                        <ul class="pagination" id="pagination">
+                            <!-- Paginação será inserida aqui -->
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+
+    <script>
+        // Variáveis globais para armazenar dados
+        let allData = [];
+        let filteredData = [];
+        let availableLotes = [];
+        let situacaoChart = null;
+        let currentPage = 1;
+        const rowsPerPage = 20; // Número de linhas por página
+
+        // Function to format numbers to Brazilian currency (R$ 1.234,56)
+        function formatCurrency(value) {
+            if (isNaN(value) || value === null || value === undefined) return 'R$ 0,00';
+            // Handle potential floating point inaccuracies for display
+            const roundedValue = Math.round(value * 100) / 100;
+            return new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL',
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(roundedValue);
+        }
+
+        // Function to format percentage
+        function formatPercentage(value, total) {
+            if (!total) return '0,00%';
+            const percentage = (value / total) * 100;
+            return new Intl.NumberFormat('pt-BR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(percentage) + '%';
+        }
+
+        // Function to format date (DD/MM/YYYY)
+        function formatDate(dateObj) {
+            if (!dateObj || !(dateObj instanceof Date) || isNaN(dateObj.getTime())) return '';
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const year = dateObj.getFullYear();
+            return `${day}/${month}/${year}`;
+        }
+
+        // Function to format current date for filename (DD.MM.YYYY)
+        function formatCurrentDateForFilename() {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            return `${day}.${month}.${year}`;
+        }
+
+        // Function to format current datetime for display
+        function formatCurrentDateTime() {
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
+        }
+
+        // Function to normalize column names (remove accents, lowercase, replace spaces)
+        function normalizeColumnName(name) {
+            if (name === null || name === undefined) return '';
+            name = String(name);
+            return name.normalize("NFD").replace(/["\u0300-\u036f]/g, "") // Remove accents
+                       .toLowerCase()
+                       .replace(/[^a-z0-9]+/g, '_') // Replace non-alphanumeric with underscore
+                       .replace(/^_+|_+$/g, ''); // Trim underscores
+        }
+
+        // Function to parse date strings (assuming DD/MM/YYYY)
+        function parseDate(dateString) {
+            if (!dateString || typeof dateString !== 'string') return null;
+            const parts = dateString.split('/');
+            if (parts.length === 3) {
+                const day = parseInt(parts[0], 10);
+                const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+                const year = parseInt(parts[2], 10);
+                if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+                    const date = new Date(year, month, day);
+                    // Basic validation: Check if the components match after Date object creation
+                    if (date.getFullYear() === year && date.getMonth() === month && date.getDate() === day) {
+                        return date;
+                    }
+                }
+            }
+            // Try parsing as ISO or other formats if DD/MM/YYYY fails
+            const alternativeDate = new Date(dateString);
+            if (!isNaN(alternativeDate.getTime())) {
+                return alternativeDate;
+            }
+            return null; // Return null if parsing fails
+        }
+
+        // Function to parse currency string (R$ 1.234,56 -> 1234.56)
+        function parseCurrency(value) {
+            if (value === null || value === undefined) return 0;
+            const cleanedValue = String(value)
+                .replace('R$', '')
+                .replace(/\./g, '') // Remove thousand separators
+                .replace(',', '.') // Replace decimal comma with dot
+                .trim();
+            const number = parseFloat(cleanedValue);
+            return isNaN(number) ? 0 : number;
+        }
+
+        // Função para mostrar o overlay de carregamento
+        function showLoading() {
+            document.getElementById('loadingOverlay').style.visibility = 'visible';
+        }
+
+        // Função para esconder o overlay de carregamento
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.visibility = 'hidden';
+        }
+
+        // Função para popular o dropdown de lotes
+        function populateLoteDropdown(lotes) {
+            const loteFiltro = document.getElementById('loteFiltro');
+            loteFiltro.innerHTML = '<option value="todos">Todos os Lotes</option>';
+            
+            // Ordena os lotes numericamente
+            lotes.sort((a, b) => a - b);
+            
+            lotes.forEach(lote => {
+                const option = document.createElement('option');
+                option.value = lote;
+                option.textContent = `Lote ${lote}`;
+                loteFiltro.appendChild(option);
+            });
+        }
+
+        // Função para criar/atualizar o gráfico de situação
+        function updateSituacaoChart(totalBaixadoValor, totalAbertoValor) {
+            const ctx = document.getElementById('situacaoChart').getContext('2d');
+            
+            // Destruir gráfico existente se houver
+            if (situacaoChart) {
+                situacaoChart.destroy();
+            }
+            
+            // Criar novo gráfico
+            situacaoChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Baixado', 'Aberto'],
+                    datasets: [{
+                        label: 'Valor (R$)',
+                        data: [totalBaixadoValor, totalAbertoValor],
+                        backgroundColor: [
+                            '#27ae60', // Verde para Baixado
+                            '#e74c3c'  // Vermelho para Aberto
+                        ],
+                        borderColor: [
+                            '#27ae60',
+                            '#e74c3c'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return formatCurrency(value).replace('R$', 'R$ ');
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return formatCurrency(context.raw);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Função para atualizar o painel de resumo total
+        function updateTotalSummaryPanel(totalData) {
+            // Tipos de boleto a serem excluídos
+            const excludedTiposBoleto = ['ADESÃO', 'PARTICIPAÇÃO', 'DESCONTO100%', '40%PERIFERICOS'];
+            
+            // Filtrar os dados para excluir os tipos de boleto especificados
+            const filteredTotalData = totalData.filter(row => !excludedTiposBoleto.includes(row.tipo_boleto_norm));
+            
+            // Calcular totais com os dados filtrados
+            const summary = {
+                BAIXADO: { valor: 0, qtde: 0 },
+                ABERTO: { valor: 0, qtde: 0 },
+                TOTAL: { valor: 0, qtde: 0 }
+            };
+            
+            filteredTotalData.forEach(row => {
+                if (row.situacao_norm === 'BAIXADO') {
+                    summary.BAIXADO.valor += row.valor_numeric;
+                    summary.BAIXADO.qtde++;
+                } else if (row.situacao_norm === 'ABERTO') {
+                    summary.ABERTO.valor += row.valor_numeric;
+                    summary.ABERTO.qtde++;
+                }
+            });
+            
+            summary.TOTAL.valor = summary.BAIXADO.valor + summary.ABERTO.valor;
+            summary.TOTAL.qtde = summary.BAIXADO.qtde + summary.ABERTO.qtde;
+            
+            // Atualizar os valores no painel
+            const totalBoletos = summary.BAIXADO.qtde + summary.ABERTO.qtde;
+            const totalValor = summary.BAIXADO.valor + summary.ABERTO.valor;
+            
+            document.getElementById('totalBoletos').textContent = totalBoletos;
+            document.getElementById('totalAbertoValor').textContent = formatCurrency(summary.ABERTO.valor);
+            document.getElementById('totalAbertoPercent').textContent = formatPercentage(summary.ABERTO.qtde, totalBoletos);
+            document.getElementById('totalAbertoQtd').textContent = summary.ABERTO.qtde;
+            document.getElementById('totalBaixadoValor').textContent = formatCurrency(summary.BAIXADO.valor);
+            document.getElementById('totalBaixadoPercent').textContent = formatPercentage(summary.BAIXADO.qtde, totalBoletos);
+            document.getElementById('totalBaixadoQtd').textContent = summary.BAIXADO.qtde;
+            document.getElementById('totalReceberValor').textContent = formatCurrency(totalValor);
+            
+            // Mostrar o painel
+            document.getElementById('totalSummaryPanel').style.display = 'block';
+            
+            // Atualizar o gráfico
+            updateSituacaoChart(summary.BAIXADO.valor, summary.ABERTO.valor);
+        }
+
+        // Função para atualizar a hora da última atualização
+        function updateLastUpdateTime() {
+            const lastUpdateTime = document.getElementById('lastUpdateTime');
+            lastUpdateTime.textContent = formatCurrentDateTime();
+            document.getElementById('lastUpdateContainer').style.display = 'block';
+        }
+
+        // Função para aplicar filtros
+        function applyFilters() {
+            const loteFilter = document.getElementById('loteFiltro').value;
+            const mesFilter = document.getElementById('mesFiltro').value;
+            
+            filteredData = allData.filter(row => {
+                let passesLoteFilter = true;
+                let passesMesFilter = true;
+                
+                // Filtro de lote
+                if (loteFilter !== 'todos') {
+                    passesLoteFilter = row.lote == loteFilter; // Comparação de valor, não tipo
+                }
+                
+                // Filtro de mês
+                if (mesFilter !== 'todos' && row.data_vencimento_date) {
+                    passesMesFilter = (row.data_vencimento_date.getMonth() + 1) == mesFilter;
+                }
+                
+                return passesLoteFilter && passesMesFilter;
+            });
+            
+            // Recalcular e exibir os painéis com os dados filtrados
+            calculateAndDisplayDashboard(filteredData);
+            
+            // Atualizar a tabela detalhada
+            currentPage = 1; // Resetar para a primeira página
+            displayDetailedData(filteredData);
+            
+            // Atualizar a hora da última atualização
+            updateLastUpdateTime();
+        }
+
+        // Função para gerar paginação
+        function generatePagination(totalItems) {
+            const totalPages = Math.ceil(totalItems / rowsPerPage);
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+            
+            // Botão Anterior
+            const prevLi = document.createElement('li');
+            prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+            const prevLink = document.createElement('a');
+            prevLink.className = 'page-link';
+            prevLink.href = '#';
+            prevLink.innerHTML = '«';
+            prevLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (currentPage > 1) {
+                    currentPage--;
+                    displayDetailedData(filteredData);
+                }
+            });
+            prevLi.appendChild(prevLink);
+            pagination.appendChild(prevLi);
+            
+            // Determinar quais páginas mostrar
+            let startPage = Math.max(1, currentPage - 2);
+            let endPage = Math.min(totalPages, startPage + 4);
+            
+            if (endPage - startPage < 4 && startPage > 1) {
+                startPage = Math.max(1, endPage - 4);
+            }
+            
+            // Botões de página
+            for (let i = startPage; i <= endPage; i++) {
+                const pageLi = document.createElement('li');
+                pageLi.className = `page-item ${i === currentPage ? 'active' : ''}`;
+                const pageLink = document.createElement('a');
+                pageLink.className = 'page-link';
+                pageLink.href = '#';
+                pageLink.textContent = i;
+                pageLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    currentPage = i;
+                    displayDetailedData(filteredData);
+                });
+                pageLi.appendChild(pageLink);
+                pagination.appendChild(pageLi);
+            }
+            
+            // Botão Próximo
+            const nextLi = document.createElement('li');
+            nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+            const nextLink = document.createElement('a');
+            nextLink.className = 'page-link';
+            nextLink.href = '#';
+            nextLink.innerHTML = '»';
+            nextLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    displayDetailedData(filteredData);
+                }
+            });
+            nextLi.appendChild(nextLink);
+            pagination.appendChild(nextLi);
+            
+            // Atualizar informações da tabela
+            document.getElementById('tableInfo').textContent = 
+                `Mostrando ${Math.min((currentPage - 1) * rowsPerPage + 1, totalItems)} a ${Math.min(currentPage * rowsPerPage, totalItems)} de ${totalItems} registros`;
+        }
+
+        async function processFile() {
+            const fileInput = document.getElementById('fileInput');
+            const dashboardPanels = document.getElementById('dashboardPanels');
+            const errorMessageDiv = document.getElementById('errorMessage');
+            const dataTableContainer = document.querySelector('.data-table-container');
+            const totalSummaryPanel = document.getElementById('totalSummaryPanel');
+            const generatePdfBtn = document.getElementById('generatePdfBtn');
+            
+            errorMessageDiv.textContent = ''; // Clear previous errors
+            dashboardPanels.innerHTML = ''; // Clear previous results
+            totalSummaryPanel.style.display = 'none'; // Hide total summary panel
+            generatePdfBtn.style.display = 'none'; // Hide PDF button
+            
+            if (!fileInput.files.length) {
+                errorMessageDiv.textContent = 'Por favor, selecione um arquivo Excel.';
+                return;
+            }
+
+            showLoading(); // Mostrar indicador de carregamento
+            
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array', cellDates: true }); // cellDates: true helps with date parsing
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+
+                    // Define o intervalo específico A2:H1048569 conforme solicitado pelo usuário
+                    const range = {s: {r: 1, c: 0}, e: {r: 1048568, c: 7}}; // A2:H1048569 (0-indexed, então A2 é r:1, c:0 e H1048569 é r:1048568, c:7)
+                    
+                    // Extrai os dados do intervalo específico
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                        header: 1, // Use primeira linha como cabeçalho
+                        defval: null, // Use null para células vazias
+                        range: range // Especifica o intervalo A2:H1048569
+                    });
+                    
+                    if (!jsonData || jsonData.length === 0) {
+                         throw new Error("Nenhum dado encontrado na planilha ou falha na leitura.");
+                    }
+
+                    // Assumimos que a primeira linha do intervalo A2:H1048569 é o cabeçalho
+                    const headerRowIndex = 0;
+                    const headers = jsonData[headerRowIndex].map(h => String(h || ''));
+                    
+                    // Extrai os dados (linhas após o cabeçalho)
+                    const dataRows = [];
+                    for (let i = headerRowIndex + 1; i < jsonData.length; i++) {
+                        const row = jsonData[i];
+                        if (!row || row.every(cell => cell === null || cell === '')) continue; // Skip empty rows
+                        
+                        const dataObj = {};
+                        for (let j = 0; j < headers.length; j++) {
+                            if (j < row.length) {
+                                dataObj[headers[j]] = row[j];
+                            } else {
+                                dataObj[headers[j]] = null;
+                            }
+                        }
+                        dataRows.push(dataObj);
+                    }
+
+                    // --- Column Mapping & Normalization --- 
+                    const normalizedHeadersMap = {}; // Maps normalized name to original name
+                    const columnMap = {}; // Maps internal key to normalized name found in file
+                    const actualNormalizedSet = new Set();
+
+                    headers.forEach(header => {
+                        const normalized = normalizeColumnName(header);
+                        normalizedHeadersMap[normalized] = header;
+                        actualNormalizedSet.add(normalized);
+                    });
+                    console.log("Normalized Headers Found:", actualNormalizedSet);
+
+                    const expectedInternalKeys = {
+                        nome: 'nome',
+                        situacao: 'situacao',
+                        data_vencimento: 'data_vencimento',
+                        valor: 'valor',
+                        tipo_boleto: 'tipo_boleto',
+                        lote: 'lote',
+                        vencimento_original: 'vencimento_original',
+                        data_pagamento: 'data_pagamento'
+                    };
+
+                    let missingColumns = [];
+                    for (const internalKey in expectedInternalKeys) {
+                        const expectedNormalized = expectedInternalKeys[internalKey];
+                        if (actualNormalizedSet.has(expectedNormalized)) {
+                            columnMap[internalKey] = expectedNormalized;
+                        } else {
+                            // Try simple variations (e.g., 'situacao' vs 'situac_o') - add more if needed
+                            let foundAlt = false;
+                            if (internalKey === 'situacao' && actualNormalizedSet.has('situac_o')) {
+                                columnMap[internalKey] = 'situac_o';
+                                foundAlt = true;
+                            }
+                            // Add more alternative checks here
+                            
+                            if (!foundAlt) {
+                                missingColumns.push(internalKey);
+                                columnMap[internalKey] = null;
+                            }
+                        }
+                    }
+
+                    if (missingColumns.length > 0) {
+                        const missingOriginalNames = missingColumns.map(key => expectedInternalKeys[key] || key).join(', ');
+                        throw new Error(`Colunas essenciais não encontradas ou mapeadas: ${missingOriginalNames}. Verifique os cabeçalhos no arquivo Excel.`);
+                    }
+                    console.log("Column Mapping (Internal Key -> Normalized Found):", columnMap);
+
+                    // --- Data Processing --- 
+                    allData = dataRows.map(row => {
+                        const newRow = {};
+                        for (const internalKey in columnMap) {
+                            const normalizedColName = columnMap[internalKey];
+                            const originalColName = normalizedHeadersMap[normalizedColName]; // Get original header name
+                            newRow[internalKey] = row[originalColName]; // Use original header name to access data
+                        }
+                        
+                        // Clean/Convert specific fields
+                        newRow.valor_numeric = parseCurrency(newRow.valor);
+                        newRow.data_vencimento_date = parseDate(newRow.data_vencimento);
+                        newRow.situacao_norm = String(newRow.situacao || '').toUpperCase();
+                        newRow.tipo_boleto_norm = String(newRow.tipo_boleto || '').toUpperCase();
+                        return newRow;
+                    });
+                    
+                    // Extrair lotes únicos para o dropdown
+                    availableLotes = [...new Set(allData
+                        .filter(row => row.lote !== null && row.lote !== undefined && !isNaN(row.lote))
+                        .map(row => row.lote))];
+                    
+                    populateLoteDropdown(availableLotes);
+                    
+                    // Inicialmente, filteredData é igual a allData
+                    filteredData = [...allData];
+                    
+                    // Calcular e exibir o dashboard
+                    calculateAndDisplayDashboard(filteredData);
+                    
+                    // Exibir dados detalhados
+                    displayDetailedData(filteredData);
+                    
+                    // Mostrar a tabela de dados detalhados
+                    dataTableContainer.style.display = 'block';
+                    
+                    // Mostrar o botão de gerar PDF
+                    generatePdfBtn.style.display = 'block';
+                    
+                    // Atualizar a hora da última atualização
+                    updateLastUpdateTime();
+                    
+                    // Adicionar event listeners para os filtros
+                    document.getElementById('loteFiltro').addEventListener('change', applyFilters);
+                    document.getElementById('mesFiltro').addEventListener('change', applyFilters);
+
+                } catch (error) {
+                    console.error("Erro ao processar o arquivo:", error);
+                    errorMessageDiv.textContent = `Erro ao processar o arquivo: ${error.message}`;
+                    dashboardPanels.innerHTML = ''; // Clear panels on error
+                    dataTableContainer.style.display = 'none'; // Hide data table on error
+                    totalSummaryPanel.style.display = 'none'; // Hide total summary panel on error
+                    generatePdfBtn.style.display = 'none'; // Hide PDF button on error
+                } finally {
+                    hideLoading(); // Esconder indicador de carregamento
+                }
+            };
+
+            reader.onerror = function() {
+                errorMessageDiv.textContent = 'Erro ao ler o arquivo.';
+                hideLoading();
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Função para verificar se uma data é feriado
+        function isHoliday(date) {
+            const holidays2025 = [
+                '01/01/2025', // Confraternização Universal
+                '21/02/2025', // Carnaval (estimado)
+                '18/04/2025', // Sexta-feira Santa
+                '21/04/2025', // Tiradentes
+                '01/05/2025', // Dia do Trabalho
+                '08/06/2025', // Corpus Christi
+                '07/09/2025', // Independência do Brasil
+                '12/10/2025', // Nossa Senhora Aparecida
+                '02/11/2025', // Finados
+                '15/11/2025', // Proclamação da República
+                '25/12/2025'  // Natal
+            ];
+            const holidays2026 = [
+                '01/01/2026', // Confraternização Universal
+                '17/02/2026', // Carnaval (estimado)
+                '03/04/2026', // Sexta-feira Santa
+                '21/04/2026', // Tiradentes
+                '01/05/2026', // Dia do Trabalho
+                '11/06/2026', // Corpus Christi
+                '07/09/2026', // Independência do Brasil
+                '12/10/2026', // Nossa Senhora Aparecida
+                '02/11/2026', // Finados
+                '15/11/2026', // Proclamação da República
+                '25/12/2026'  // Natal
+            ];
+            const formattedDate = formatDate(date);
+            return holidays2025.includes(formattedDate) || holidays2026.includes(formattedDate);
+        }
+
+        // Função para obter o próximo dia útil a partir de uma data base
+        function getNextBusinessDay(baseDate) {
+            let nextDate = new Date(baseDate);
+            nextDate.setDate(nextDate.getDate() + 1);
+
+            while (true) {
+                const dayOfWeek = nextDate.getDay();
+                if (dayOfWeek >= 1 && dayOfWeek <= 5 && !isHoliday(nextDate)) {
+                    return nextDate;
+                }
+                nextDate.setDate(nextDate.getDate() + 1);
+            }
+        }
+
+        // Função para calcular o dia base ajustado (15 ou 30) para o próximo dia útil
+        function getAdjustedBaseDay(baseDay, year) {
+            const baseDate = new Date(year, 0, baseDay); // Janeiro como base, ajustará o mês depois
+            while (baseDate.getDay() === 0 || baseDate.getDay() === 6 || isHoliday(baseDate)) {
+                baseDate.setDate(baseDate.getDate() + 1);
+            }
+            return baseDate.getDate();
+        }
+
+        function calculateAndDisplayDashboard(data) {
+            const results = {};
+            
+            // Atualizar o painel de resumo total com os dados completos (filtro será aplicado dentro da função)
+            updateTotalSummaryPanel(data);
+
+            function calculateSummary(filteredData) {
+                const summary = {
+                    BAIXADO: { valor: 0, qtde: 0 },
+                    ABERTO: { valor: 0, qtde: 0 },
+                    TOTAL: { valor: 0, qtde: 0 }
+                };
+                filteredData.forEach(row => {
+                    if (row.situacao_norm === 'BAIXADO') {
+                        summary.BAIXADO.valor += row.valor_numeric;
+                        summary.BAIXADO.qtde++;
+                    } else if (row.situacao_norm === 'ABERTO') {
+                        summary.ABERTO.valor += row.valor_numeric;
+                        summary.ABERTO.qtde++;
+                    }
+                });
+                summary.TOTAL.valor = summary.BAIXADO.valor + summary.ABERTO.valor;
+                summary.TOTAL.qtde = summary.BAIXADO.qtde + summary.ABERTO.qtde;
+                return summary;
+            }
+
+            // 1. Lote Fechamento
+            const df_fechamento = data.filter(r => r.tipo_boleto_norm === 'FECHAMENTO');
+            results['lote_fechamento'] = calculateSummary(df_fechamento);
+
+            // 2. Lote Fechamento Dia 15 (com ajuste para dias úteis)
+            const adjustedDay15_2025 = getAdjustedBaseDay(15, 2025);
+            const adjustedDay15_2026 = getAdjustedBaseDay(15, 2026);
+            const df_fechamento_dia15 = df_fechamento.filter(r => {
+                if (!r.data_vencimento_date) return false;
+                const day = r.data_vencimento_date.getDate();
+                const year = r.data_vencimento_date.getFullYear();
+                return (year === 2025 || year === 2026) && 
+                       (day >= adjustedDay15_2025 && day <= 20 || 
+                        day >= adjustedDay15_2026 && day <= 20);
+            });
+            results['lote_fechamento_dia15'] = calculateSummary(df_fechamento_dia15);
+
+            // 3. Lote Fechamento Dia 30 (com ajuste para dias úteis)
+            const adjustedDay30_2025 = getAdjustedBaseDay(30, 2025);
+            const adjustedDay30_2026 = getAdjustedBaseDay(30, 2026);
+            const df_fechamento_dia30 = df_fechamento.filter(r => {
+                if (!r.data_vencimento_date) return false;
+                const day = r.data_vencimento_date.getDate();
+                const year = r.data_vencimento_date.getFullYear();
+                return (year === 2025 || year === 2026) && 
+                       (day >= adjustedDay30_2025 && day <= 31 || 
+                        day >= 1 && day <= 4 || 
+                        day >= adjustedDay30_2026 && day <= 31 || 
+                        day >= 1 && day <= 4);
+            });
+            results['lote_fechamento_dia30'] = calculateSummary(df_fechamento_dia30);
+
+            // 4. Acordo Financeiro
+            const df_acordo = data.filter(r => r.tipo_boleto_norm === 'ACORDO FINANCEIRO');
+            results['acordo_financeiro'] = calculateSummary(df_acordo);
+
+            // 5. Desconto por Indicação
+            const df_desconto = data.filter(r => r.tipo_boleto_norm === 'DESCONTO50%');
+            results['desconto_indicacao'] = calculateSummary(df_desconto);
+
+            // 6. Desinstalação de Equipamento (incluindo MIGRAÇÃO DE SISTEMA)
+            const df_desinstalacao = data.filter(r => 
+                r.tipo_boleto_norm === 'DESINSTALAÇÃO DE EQUIPAMENTO' || 
+                r.tipo_boleto_norm === 'MIGRAÇÃO DE SISTEMA'
+            );
+            results['desinstalacao_equipamento'] = calculateSummary(df_desinstalacao);
+
+            console.log("Calculation Results:", results);
+            displayDashboard(results);
+        }
+
+        function displayDashboard(data) {
+            const dashboardPanels = document.getElementById('dashboardPanels');
+            dashboardPanels.innerHTML = ''; // Clear previous content
+
+            const panelOrder = [
+                { key: 'lote_fechamento', title: 'LOTE FECHAMENTO', headerClass: 'card-header-lote-fechamento', icon: 'fas fa-file-invoice-dollar' },
+                { key: 'lote_fechamento_dia15', title: 'LOTE FECHAMENTO (DIA 15)', headerClass: 'card-header-lote-fechamento-15', icon: 'fas fa-calendar-day' },
+                { key: 'lote_fechamento_dia30', title: 'LOTE FECHAMENTO (DIA 30)', headerClass: 'card-header-lote-fechamento-30', icon: 'fas fa-calendar-alt' },
+                { key: 'acordo_financeiro', title: 'ACORDO FINANCEIRO', headerClass: 'card-header-acordo-financeiro', icon: 'fas fa-handshake' },
+                { key: 'desconto_indicacao', title: 'DESCONTO POR INDICAÇÃO', headerClass: 'card-header-desconto', icon: 'fas fa-percentage' },
+                { key: 'desinstalacao_equipamento', title: 'DESINSTALAÇÃO DE EQUIPAMENTO', headerClass: 'card-header-desinstalacao-equipamento', icon: 'fas fa-tools' }
+            ];
+
+            // Criar uma linha para cada par de painéis
+            for (let i = 0; i < panelOrder.length; i += 2) {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'row mb-4';
+                
+                // Adicionar o primeiro painel da linha
+                const panel1 = panelOrder[i];
+                if (panel1 && data[panel1.key]) {
+                    rowDiv.appendChild(createPanelElement(panel1, data[panel1.key]));
+                }
+                
+                // Adicionar o segundo painel da linha (se existir)
+                const panel2 = panelOrder[i + 1];
+                if (panel2 && data[panel2.key]) {
+                    rowDiv.appendChild(createPanelElement(panel2, data[panel2.key]));
+                }
+                
+                dashboardPanels.appendChild(rowDiv);
+            }
+        }
+
+        function createPanelElement(panelInfo, summary) {
+            const colDiv = document.createElement('div');
+            colDiv.className = 'col-md-6';
+            
+            const panelHtml = `
+                <div class="card">
+                    <div class="card-header ${panelInfo.headerClass}">
+                        <i class="${panelInfo.icon} me-2"></i>${panelInfo.title}
+                    </div>
+                    <div class="card-body p-0"> 
+                        <table class="table table-sm table-borderless mb-0"> 
+                            <thead>
+                                <tr>
+                                    <th>SITUAÇÃO</th>
+                                    <th class="text-end">VALOR</th>
+                                    <th class="text-end percentage">%</th>
+                                    <th class="text-end">QTDE BOLETOS</th>
+                                    <th class="text-end percentage">%</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="bg-aberto">ABERTO</td>
+                                    <td class="text-end">${formatCurrency(summary.ABERTO.valor)}</td>
+                                    <td class="text-end percentage">${formatPercentage(summary.ABERTO.valor, summary.TOTAL.valor)}</td>
+                                    <td class="text-end">${summary.ABERTO.qtde}</td>
+                                    <td class="text-end percentage">${formatPercentage(summary.ABERTO.qtde, summary.TOTAL.qtde)}</td>
+                                </tr>
+                                <tr>
+                                    <td class="bg-baixado">BAIXADO</td>
+                                    <td class="text-end">${formatCurrency(summary.BAIXADO.valor)}</td>
+                                    <td class="text-end percentage">${formatPercentage(summary.BAIXADO.valor, summary.TOTAL.valor)}</td>
+                                    <td class="text-end">${summary.BAIXADO.qtde}</td>
+                                    <td class="text-end percentage">${formatPercentage(summary.BAIXADO.qtde, summary.TOTAL.qtde)}</td>
+                                </tr>
+                                <tr class="total-row">
+                                    <td>TOTAL A RECEBER</td>
+                                    <td class="text-end">${formatCurrency(summary.TOTAL.valor)}</td>
+                                    <td class="text-end percentage"></td>
+                                    <td class="text-end">${summary.TOTAL.qtde}</td>
+                                    <td class="text-end percentage"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            
+            colDiv.innerHTML = panelHtml;
+            return colDiv;
+        }
+
+        // Função para pesquisar por nome na tabela
+        function searchTable() {
+            const searchInput = document.getElementById('searchInput').value.toLowerCase();
+            const filteredSearchData = filteredData.filter(row => {
+                const nome = (row.nome || '').toLowerCase();
+                return nome.includes(searchInput);
+            });
+
+            // Resetar para a primeira página após a pesquisa
+            currentPage = 1;
+
+            // Exibir os dados filtrados
+            displayDetailedData(filteredSearchData);
+        }
+
+        function displayDetailedData(data) {
+            const tableBody = document.getElementById('detailedDataTableBody');
+            tableBody.innerHTML = ''; // Limpar dados anteriores
+            
+            // Calcular índices para a página atual
+            const startIndex = (currentPage - 1) * rowsPerPage;
+            const endIndex = Math.min(startIndex + rowsPerPage, data.length);
+            
+            // Exibir apenas os dados da página atual
+            const displayData = data.slice(startIndex, endIndex);
+            
+            displayData.forEach(row => {
+                const tr = document.createElement('tr');
+                
+                // Aplicar classe baseada na situação
+                if (row.situacao_norm === 'BAIXADO') {
+                    tr.classList.add('table-success');
+                } else if (row.situacao_norm === 'ABERTO') {
+                    tr.classList.add('table-danger');
+                }
+                
+                tr.innerHTML = `
+                    <td>${row.nome || ''}</td>
+                    <td class="${row.situacao_norm === 'BAIXADO' ? 'bg-baixado' : 'bg-aberto'}">${row.situacao || ''}</td>
+                    <td>${row.data_vencimento || ''}</td>
+                    <td>${row.valor || ''}</td>
+                    <td>${row.tipo_boleto || ''}</td>
+                    <td>${row.lote || ''}</td>
+                    <td>${row.vencimento_original || ''}</td>
+                    <td>${row.data_pagamento || ''}</td>
+                `;
+                
+                tableBody.appendChild(tr);
+            });
+            
+            // Gerar paginação
+            generatePagination(data.length);
+        }
+
+        // Função para gerar PDF
+        function generatePDF() {
+            showLoading(); // Mostrar indicador de carregamento
+            
+            // Importar jsPDF
+            const { jsPDF } = window.jspdf;
+            
+            // Criar uma nova instância de jsPDF (A4 em orientação retrato)
+            const pdf = new jsPDF({
+                orientation: 'portrait',
+                unit: 'mm',
+                format: 'a4'
+            });
+            
+            // Configurar margens (em mm)
+            const margin = 15;
+            const pageWidth = 210; // A4 width
+            const contentWidth = pageWidth - (2 * margin);
+            
+            // Elementos a serem capturados para o PDF
+            const elements = [
+                { id: 'dashboard-header', name: 'Cabeçalho' },
+                { id: 'lastUpdateContainer', name: 'Última Atualização' },
+                { id: 'totalSummaryPanel', name: 'Resumo Total' },
+                { id: 'dashboardPanels', name: 'Painéis' }
+            ];
+            
+            // Nome do arquivo
+            const filename = `ACOMPANHAMENTO DE PAGAMENTO ${formatCurrentDateForFilename()}.pdf`;
+            
+            // Função para processar cada elemento sequencialmente
+            let currentElement = 0;
+            let currentY = margin;
+            
+            function processNextElement() {
+                if (currentElement >= elements.length) {
+                    // Todos os elementos foram processados, salvar o PDF
+                    pdf.save(filename);
+                    hideLoading(); // Esconder indicador de carregamento
+                    return;
+                }
+                
+                const element = document.getElementById(elements[currentElement].id);
+                if (!element || element.style.display === 'none') {
+                    // Elemento não existe ou está oculto, pular para o próximo
+                    currentElement++;
+                    processNextElement();
+                    return;
+                }
+                
+                // Capturar o elemento como imagem
+                html2canvas(element, {
+                    scale: 2, // Melhor qualidade
+                    useCORS: true,
+                    logging: false
+                }).then(canvas => {
+                    // Verificar se é necessário adicionar uma nova página
+                    const imgHeight = (canvas.height * contentWidth) / canvas.width;
+                    if (currentY + imgHeight > 297 - margin) { // A4 height = 297mm
+                        pdf.addPage();
+                        currentY = margin;
+                    }
+                    
+                    // Adicionar a imagem ao PDF
+                    const imgData = canvas.toDataURL('image/png');
+                    pdf.addImage(imgData, 'PNG', margin, currentY, contentWidth, imgHeight);
+                    
+                    // Atualizar a posição Y para o próximo elemento
+                    currentY += imgHeight + 10; // 10mm de espaço entre elementos
+                    
+                    // Processar o próximo elemento
+                    currentElement++;
+                    processNextElement();
+                });
+            }
+            
+            // Iniciar o processamento
+            processNextElement();
+        }
+    </script>
+</body>
+</html>
